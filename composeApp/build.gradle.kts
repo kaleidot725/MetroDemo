@@ -1,82 +1,110 @@
+import org.jetbrains.compose.ExperimentalComposeLibrary
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.compose.reload.gradle.ComposeHotRun
+import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSetTree
 
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidApplication)
-    alias(libs.plugins.composeMultiplatform)
-    alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.multiplatform)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.compose)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.hotReload)
+    alias(libs.plugins.kotlinx.serialization)
 }
 
 kotlin {
     androidTarget {
-        @OptIn(ExperimentalKotlinGradlePluginApi::class)
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
-        }
+        //https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-test.html
+        instrumentedTestVariant.sourceSetTree.set(KotlinSourceSetTree.test)
     }
-    
+
+    jvm()
+
     listOf(
         iosX64(),
         iosArm64(),
         iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
+    ).forEach {
+        it.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
         }
     }
-    
+
     sourceSets {
-        androidMain.dependencies {
-            implementation(compose.preview)
-            implementation(libs.androidx.activity.compose)
-        }
         commonMain.dependencies {
             implementation(compose.runtime)
+            implementation(compose.ui)
             implementation(compose.foundation)
             implementation(compose.material3)
-            implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
-            implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(libs.kotlinx.serialization.json)
         }
+
         commonTest.dependencies {
-            implementation(libs.kotlin.test)
+            implementation(kotlin("test"))
+            @OptIn(ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
+
+        androidMain.dependencies {
+            implementation(compose.uiTooling)
+            implementation(libs.androidx.activityCompose)
+        }
+
+        jvmMain.dependencies {
+            implementation(compose.desktop.currentOs)
+        }
+
     }
 }
 
 android {
     namespace = "jp.kaleidot725.metro.demo"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "jp.kaleidot725.metro.demo"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        minSdk = 21
+        targetSdk = 35
+
+        applicationId = "jp.kaleidot725.metro.demo.androidApp"
         versionCode = 1
-        versionName = "1.0"
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-        }
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        versionName = "1.0.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }
 
+//https://developer.android.com/develop/ui/compose/testing#setup
 dependencies {
-    debugImplementation(compose.uiTooling)
+    androidTestImplementation(libs.androidx.uitest.junit4)
+    debugImplementation(libs.androidx.uitest.testManifest)
 }
 
+compose.desktop {
+    application {
+        mainClass = "MainKt"
+
+        nativeDistributions {
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            packageName = "MetroDemo"
+            packageVersion = "1.0.0"
+
+            linux {
+                iconFile.set(project.file("desktopAppIcons/LinuxIcon.png"))
+            }
+            windows {
+                iconFile.set(project.file("desktopAppIcons/WindowsIcon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("desktopAppIcons/MacosIcon.icns"))
+                bundleID = "jp.kaleidot725.metro.demo.desktopApp"
+            }
+        }
+    }
+}
+
+tasks.withType<ComposeHotRun>().configureEach {
+    mainClass = "MainKt"
+}
